@@ -17,7 +17,7 @@ def chromeBrowserOptions():
     options.add_argument("--disable-blink-features=AutomationControlled")
     options.add_experimental_option('useAutomationExtension', False)
     options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    if(len(config.chromeProfilePath)>0):
+    if(0):
         initialPath = config.chromeProfilePath[0:config.chromeProfilePath.rfind("/")]
         profileDir = config.chromeProfilePath[config.chromeProfilePath.rfind("/")+1:]
         options.add_argument('--user-data-dir=' +initialPath)

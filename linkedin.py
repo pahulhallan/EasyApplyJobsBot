@@ -1,4 +1,7 @@
 import time,math,random,os
+
+from selenium.webdriver.support.select import Select
+
 import utils,constants,config
 import pickle, hashlib
 
@@ -7,15 +10,19 @@ from selenium.webdriver.common.by import By
 
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.chrome.service import Service as ChromeService
+import yaml
+
+# Load answers from a YAML file
+
 
 class Linkedin:
     def __init__(self):
             utils.prYellow("🤖 Thanks for using Easy Apply Jobs bot, for more information you can visit our site - www.automated-bots.com")
             utils.prYellow("🌐 Bot will run in Chrome browser and log in Linkedin for you.")
             self.driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()),options=utils.chromeBrowserOptions())
-            self.cookies_path = f"{os.path.join(os.getcwd(),'cookies')}/{self.getHash(config.email)}.pkl"
+            # self.cookies_path = f"{os.path.join(os.getcwd(),'cookies')}/{self.getHash(config.email)}.pkl"
             self.driver.get('https://www.linkedin.com')
-            self.loadCookies()
+            # self.loadCookies()
 
             if not self.isLoggedIn():
                 self.driver.get("https://www.linkedin.com/login?trk=guest_homepage-basic_nav-header-signin")
@@ -25,17 +32,34 @@ class Linkedin:
                     time.sleep(2)
                     self.driver.find_element("id","password").send_keys(config.password)
                     time.sleep(2)
+                    # remember_me_checkbox = self.driver.find_element("id", "rememberMeOptIn-checkbox")
+                    # if remember_me_checkbox.is_selected():  # If it's checked, uncheck it
+                    #     remember_me_checkbox.click()
+                    self.driver.execute_script("document.getElementById('rememberMeOptIn-checkbox').checked = false;")
+                    time.sleep(7)
                     self.driver.find_element("xpath",'//button[@type="submit"]').click()
                     time.sleep(30)
+                    utils.prGreen("🔄logged in Linkedin...")
                 except:
                     utils.prRed("❌ Couldn't log in Linkedin by using Chrome. Please check your Linkedin credentials on config files line 7 and 8.")
 
-                self.saveCookies()
+                # self.saveCookies()
+                
+            # Test Additional questions
+
+
+
             # start application
+
             self.linkJobApply()
 
     def getHash(self, string):
         return hashlib.md5(string.encode('utf-8')).hexdigest()
+
+    def load_yaml_answers(self,file_path):
+        with open(file_path, 'r') as file:
+            answers = yaml.safe_load(file)
+        return answers
 
     def loadCookies(self):
         if os.path.exists(self.cookies_path):
@@ -68,6 +92,81 @@ class Linkedin:
         except:
             utils.prRed("❌ Couldn't generate urls, make sure you have editted config file line 25-39")
 
+    def click_next_button(self, labels = None):
+        try:
+            # List of possible button labels
+
+            button_labels = [
+                'Next',
+                'Continue to next step',
+                'Review your application',
+                'Submit application',
+                'Submit',
+                'Review',
+                'Continue'
+            ]
+
+
+            if labels is None:
+                labels=button_labels
+
+            # if len(labels) == 1:
+            #     self.driver.find_element(By.CSS_SELECTOR, f"button[aria-label={labels[0]}]").click()
+
+            # Try each button label
+            for label in labels:
+                try:
+                    # Try aria-label first
+                    button = self.driver.find_element(By.CSS_SELECTOR, f"button[aria-label='{label}']")
+                    button.click()
+                    time.sleep(random.uniform(1, constants.botSpeed))
+                    return True
+                except:
+                    try:
+                        # Try button text content
+                        button = self.driver.find_element(By.XPATH, f"//button[contains(text(), '{label}')]")
+                        button.click()
+                        time.sleep(random.uniform(1, constants.botSpeed))
+                        return True
+                    except:
+                        raise
+
+            # If no button was found and clicked
+            print("No next/submit button found")
+            return True
+
+        except Exception as e:
+            print(f"Error in click_next_button: {str(e)}")
+            return False
+
+    def fill_out_additional_questions(self):
+        try:
+            # Handle text inputs and textareas
+            text_inputs = self.driver.find_elements(
+                By.CSS_SELECTOR,
+                "input[type='text'], input:not([type]), textarea"
+            )
+            for input_field in text_inputs:
+                if input_field.is_displayed() and input_field.is_enabled():
+                    input_field.clear()
+                    input_field.send_keys("4")
+                    time.sleep(random.uniform(1, constants.botSpeed))
+
+            select_dropdowns = self.driver.find_elements(By.TAG_NAME, "select")
+            for dropdown in select_dropdowns:
+                if dropdown.is_displayed() and dropdown.is_enabled():
+                    select = Select(dropdown)
+                    try:
+                        select.select_by_visible_text('Yes')
+                    except:
+                        select.select_by_index(0)
+                    time.sleep(random.uniform(1, constants.botSpeed))
+
+            self.click_next_button()
+
+        except Exception as e:
+            utils.prRed(f"❌ Error filling out additional questions: {str(e)}")
+
     def linkJobApply(self):
         self.generateUrls()
         countApplied = 0
@@ -75,85 +174,106 @@ class Linkedin:
 
         urlData = utils.getUrlDataFile()
 
-        for url in urlData:        
-            self.driver.get(url)
-            time.sleep(random.uniform(1, constants.botSpeed))
-
-            totalJobs = self.driver.find_element(By.XPATH,'//small').text 
-            totalPages = utils.jobsToPages(totalJobs)
-
-            urlWords =  utils.urlToKeywords(url)
-            lineToWrite = "\n Category: " + urlWords[0] + ", Location: " +urlWords[1] + ", Applying " +str(totalJobs)+ " jobs."
-            self.displayWriteResults(lineToWrite)
-
-            for page in range(totalPages):
-                currentPageJobs = constants.jobsPerPage * page
-                url = url +"&start="+ str(currentPageJobs)
+        for url in urlData:
+                print(url)
                 self.driver.get(url)
                 time.sleep(random.uniform(1, constants.botSpeed))
 
-                offersPerPage = self.driver.find_elements(By.XPATH, '//li[@data-occludable-job-id]')
-                offerIds = [(offer.get_attribute(
-                    "data-occludable-job-id").split(":")[-1]) for offer in offersPerPage]
-                time.sleep(random.uniform(1, constants.botSpeed))
+                totalJobs = self.driver.find_element(By.XPATH,'//small').text
+                totalPages = utils.jobsToPages(totalJobs)
 
-                for offer in offersPerPage:
-                    if not self.element_exists(offer, By.XPATH, ".//*[contains(text(), 'Applied')]"):
-                        offerId = offer.get_attribute("data-occludable-job-id")
-                        offerIds.append(int(offerId.split(":")[-1]))
+                urlWords =  utils.urlToKeywords(url)
+                lineToWrite = "\n Category: " + urlWords[0] + ", Location: " +urlWords[1] + ", Applying " +str(totalJobs)+ " jobs."
+                self.displayWriteResults(lineToWrite)
 
-                for jobID in offerIds:
-                    offerPage = 'https://www.linkedin.com/jobs/view/' + str(jobID)
-                    self.driver.get(offerPage)
+                for page in range(totalPages):
+                    currentPageJobs = constants.jobsPerPage * page
+                    url = url +"&start="+ str(currentPageJobs)
+                    self.driver.get(url)
                     time.sleep(random.uniform(1, constants.botSpeed))
 
-                    countJobs += 1
+                    offersPerPage = self.driver.find_elements(By.XPATH, '//li[@data-occludable-job-id]')
+                    offerIds = [(offer.get_attribute(
+                        "data-occludable-job-id").split(":")[-1]) for offer in offersPerPage]
+                    time.sleep(random.uniform(1, constants.botSpeed))
 
-                    jobProperties = self.getJobProperties(countJobs)
-                    if "blacklisted" in jobProperties: 
-                        lineToWrite = jobProperties + " | " + "* 🤬 Blacklisted Job, skipped!: " +str(offerPage)
-                        self.displayWriteResults(lineToWrite)
-                    
-                    else :                    
-                        easyApplybutton = self.easyApplyButton()
+                    for offer in offersPerPage:
+                        if not self.element_exists(offer, By.XPATH, ".//*[contains(text(), 'Applied')]"):
+                            offerId = offer.get_attribute("data-occludable-job-id")
+                            offerIds.append(int(offerId.split(":")[-1]))
 
-                        if easyApplybutton is not False:
-                            easyApplybutton.click()
-                            time.sleep(random.uniform(1, constants.botSpeed))
-                            
-                            try:
-                                self.chooseResume()
-                                self.driver.find_element(By.CSS_SELECTOR, "button[aria-label='Submit application']").click()
-                                time.sleep(random.uniform(1, constants.botSpeed))
+                    for jobID in offerIds:
+                        offerPage = 'https://www.linkedin.com/jobs/view/' + str(jobID)
+                        self.driver.get(offerPage)
+                        time.sleep(random.uniform(1, constants.botSpeed))
 
-                                lineToWrite = jobProperties + " | " + "* 🥳 Just Applied to this job: "  +str(offerPage)
-                                self.displayWriteResults(lineToWrite)
-                                countApplied += 1
+                        countJobs += 1
 
-                            except:
-                                try:
-                                    self.driver.find_element(By.CSS_SELECTOR,"button[aria-label='Continue to next step']").click()
-                                    time.sleep(random.uniform(1, constants.botSpeed))
-                                    self.chooseResume()
-                                    comPercentage = self.driver.find_element(By.XPATH,'html/body/div[3]/div/div/div[2]/div/div/span').text
-                                    percenNumber = int(comPercentage[0:comPercentage.index("%")])
-                                    result = self.applyProcess(percenNumber,offerPage)
-                                    lineToWrite = jobProperties + " | " + result
-                                    self.displayWriteResults(lineToWrite)
-                                
-                                except Exception: 
-                                    self.chooseResume()
-                                    lineToWrite = jobProperties + " | " + "* 🥵 Cannot apply to this Job! " +str(offerPage)
-                                    self.displayWriteResults(lineToWrite)
-                        else:
-                            lineToWrite = jobProperties + " | " + "* 🥳 Already applied! Job: " +str(offerPage)
+                        jobProperties = self.getJobProperties(countJobs)
+                        if "blacklisted" in jobProperties:
+                            lineToWrite = jobProperties + " | " + "* 🤬 Blacklisted Job, skipped!: " +str(offerPage)
                             self.displayWriteResults(lineToWrite)
 
+                        else :
+                            easyApplybutton = self.easyApplyButton()
+                            print(f"Ready to apply to {jobID}")
 
-            utils.prYellow("Category: " + urlWords[0] + "," +urlWords[1]+ " applied: " + str(countApplied) +
-                  " jobs out of " + str(countJobs) + ".")
-        
-        utils.donate(self)
+                            if easyApplybutton is not False:
+                                easyApplybutton.click()
+                                time.sleep(random.uniform(1, constants.botSpeed))
+
+                                try:
+                                    print(f"Trying Resume and submit {jobID}")
+                                    self.chooseResume()
+                                    # need an exception here if it doesnt get triggered so  not using the method
+                                    self.driver.find_element(By.CSS_SELECTOR, f"button[aria-label='submit']").click()
+                                    time.sleep(random.uniform(1, constants.botSpeed))
+
+                                    lineToWrite = jobProperties + " | " + "* 🥳 Just Applied to this job: "  +str(offerPage)
+                                    self.displayWriteResults(lineToWrite)
+                                    countApplied += 1
+
+                                except:
+                                    print("Need more info")
+                                    try:
+                                        self.driver.find_element(By.CSS_SELECTOR,
+                                                                 f"button[aria-label={'Next'}]").click()
+                                        # Check if we're on the additional questions page
+                                        try:
+                                            additional_questions = self.driver.find_element(
+                                                By.XPATH, 
+                                                "//*[contains(text(), 'Additional Questions') or contains(text(), 'additional questions')]"
+                                            )
+                                            if additional_questions.is_displayed():
+                                                self.fill_out_additional_questions()
+                                        except:
+                                            pass
+                                            
+                                        self.click_next_button()
+
+                                        time.sleep(random.uniform(1, constants.botSpeed))
+                                        self.chooseResume()
+                                        comPercentage = self.driver.find_element(By.XPATH,'html/body/div[3]/div/div/div[2]/div/div/span').text
+                                        percenNumber = int(comPercentage[0:comPercentage.index("%")])
+                                        result = self.applyProcess(percenNumber,offerPage)
+                                        lineToWrite = jobProperties + " | " + result
+                                        self.displayWriteResults(lineToWrite)
+                                
+                                    except Exception:
+                                        self.chooseResume()
+                                        self.driver.find_element(By.CSS_SELECTOR,
+                                                                 f"button[aria-label={'Submit'}]").click()
+                                        lineToWrite = jobProperties + " | " + "* 🥵 Cannot apply to this Job! " +str(offerPage)
+                                        self.displayWriteResults(lineToWrite)
+                            else:
+                                lineToWrite = jobProperties + " | " + "* 🥳 Already applied! Job: " +str(offerPage)
+                                self.displayWriteResults(lineToWrite)
+
+
+                utils.prYellow("Category: " + urlWords[0] + "," +urlWords[1]+ " applied: " + str(countApplied) +
+                      " jobs out of " + str(countJobs) + ".")
+
+
 
     def chooseResume(self):
         try:
@@ -225,10 +345,12 @@ class Linkedin:
     def applyProcess(self, percentage, offerPage):
         applyPages = math.floor(100 / percentage) - 2 
         result = ""
-        for pages in range(applyPages):  
-            self.driver.find_element(By.CSS_SELECTOR, "button[aria-label='Continue to next step']").click()
+        for pages in range(applyPages):
+            self.click_next_button()
+            # self.driver.find_element(By.CSS_SELECTOR, "button[aria-label='Continue to next step']").click()
 
-        self.driver.find_element( By.CSS_SELECTOR, "button[aria-label='Review your application']").click()
+        self.click_next_button()
+        # self.driver.find_element( By.CSS_SELECTOR, "button[aria-label='Review your application']").click()
         time.sleep(random.uniform(1, constants.botSpeed))
 
         if config.followCompanies is False:
@@ -237,7 +359,8 @@ class Linkedin:
             except:
                 pass
 
-        self.driver.find_element(By.CSS_SELECTOR, "button[aria-label='Submit application']").click()
+        self.click_next_button()
+        # self.driver.find_element(By.CSS_SELECTOR, "button[aria-label='Submit application']").click()
         time.sleep(random.uniform(1, constants.botSpeed))
 
         result = "* 🥳 Just Applied to this job: " + str(offerPage)
