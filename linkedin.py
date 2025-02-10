@@ -175,6 +175,8 @@ class Linkedin:
         urlData = utils.getUrlDataFile()
 
         for url in urlData:
+
+                # todo: change the flow - next, nect, review, submit, if it needs additional questions check, do not rely on exceptions for core logic
                 print(url)
                 self.driver.get(url)
                 time.sleep(random.uniform(1, constants.botSpeed))
