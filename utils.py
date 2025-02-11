@@ -106,7 +106,7 @@ class LinkedinUrlGenerate:
         path = []
         for location in config.location:
             for keyword in config.keywords:
-                    url = constants.linkJobUrl + "?f_AL=true&keywords=" +keyword+self.jobType()+self.remote()+self.checkJobLocation(location)+self.jobExp()+self.datePosted()+self.salary()+self.sortBy()
+                    url = constants.linkJobUrl + "?f_AL=true&keywords=" +keyword+self.jobType()+self.remote()+self.checkJobLocation(location)+self.jobExp()+self.datePosted()+self.sortBy()
                     path.append(url)
         return path
 

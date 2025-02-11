@@ -1,4 +1,5 @@
 import time, math, random, os
+import json
 
 from selenium.webdriver.support.select import Select
 
@@ -12,17 +13,27 @@ from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.chrome.service import Service as ChromeService
 import yaml
 
+
 class Linkedin:
     def __init__(self):
         utils.prYellow(
             "🤖 Thanks for using Easy Apply Jobs bot, for more information you can visit our site - www.automated-bots.com")
         utils.prYellow("🌐 Bot will run in Chrome browser and log in Linkedin for you.")
+
+        # Load previously applied jobs
+        self.applied_jobs_file = "data/applied_jobs.json"
+        try:
+            with open(self.applied_jobs_file, 'r') as f:
+                self.already_applied = set(json.load(f))
+            utils.prGreen(f"Loaded {len(self.already_applied)} previously applied jobs")
+        except FileNotFoundError:
+            self.already_applied = set()
+            utils.prYellow("No previous applications found, starting fresh")
+
         self.driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()),
                                        options=utils.chromeBrowserOptions())
         # self.cookies_path = f"{os.path.join(os.getcwd(),'cookies')}/{self.getHash(config.email)}.pkl"
         self.driver.get('https://www.linkedin.com')
-        self.already_applied  = set()
-
 
         if not self.isLoggedIn():
             self.driver.get("https://www.linkedin.com/login?trk=guest_homepage-basic_nav-header-signin")
@@ -146,8 +157,10 @@ class Linkedin:
             lineToWrite = "\n Category: " + urlWords[0] + ", Location: " + urlWords[1] + ", Applying " + str(
                 totalJobs) + " jobs."
             self.displayWriteResults(lineToWrite)
+            self.save_applied_jobs()
 
             for page in range(totalPages):
+
                 currentPageJobs = constants.jobsPerPage * page
                 url = url + "&start=" + str(currentPageJobs)
                 self.driver.get(url)
@@ -163,9 +176,12 @@ class Linkedin:
                         offerId = offer.get_attribute("data-occludable-job-id")
                         offerIds.append(int(offerId.split(":")[-1]))
 
+                offerIds = [str(x) for x in offerIds]
+                offerIds = list(set(offerIds) - self.already_applied)
+                utils.prGreen(f"Only applying to {len(offerIds)}, rest already applied to")
                 for jobID in offerIds:
+                    offerPage = 'https://www.linkedin.com/jobs/view/' + str(jobID)
                     try:
-                        offerPage = 'https://www.linkedin.com/jobs/view/' + str(jobID)
                         self.driver.get(offerPage)
                         time.sleep(random.uniform(1, constants.botSpeed))
 
@@ -192,8 +208,9 @@ class Linkedin:
                                                              f"button[aria-label='Submit Application']").click()
                                     time.sleep(random.uniform(1, constants.botSpeed))
 
-                                    self.already_applied.add(jobID)
-                                    lineToWrite = jobProperties + " | " + "* 🥳 Just Applied to this job: " + str(offerPage)
+                                    self.already_applied.add(str(jobID))
+                                    lineToWrite = jobProperties + " | " + "* 🥳 Just Applied to this job: " + str(
+                                        offerPage)
                                     self.displayWriteResults(lineToWrite)
                                     countApplied += 1
 
@@ -211,7 +228,6 @@ class Linkedin:
                                         time.sleep(random.uniform(1, constants.botSpeed))
                                         result = self.applyProcess(percenNumber, offerPage, jobID)
 
-
                                         lineToWrite = jobProperties + " | " + result
                                         self.displayWriteResults(lineToWrite)
 
@@ -224,10 +240,13 @@ class Linkedin:
                                         self.displayWriteResults(lineToWrite)
                             else:
                                 lineToWrite = jobProperties + " | " + "* 🥳 Already applied! Job: " + str(offerPage)
-                                self.already_applied.add(jobID)
+                                self.already_applied.add(str(jobID))
                                 self.displayWriteResults(lineToWrite)
                     except Exception as e:
-                        utils.prRed(f"{jobID} : {e}")
+                        lineToWrite = "* 🥵 Cannot apply to this Job! Major Error " + str(
+                            offerPage)
+                        self.save_applied_jobs()
+                        self.displayWriteResults(lineToWrite)
 
             utils.prYellow("Category: " + urlWords[0] + "," + urlWords[1] + " applied: " + str(countApplied) +
                            " jobs out of " + str(countJobs) + ".")
@@ -332,7 +351,7 @@ class Linkedin:
 
         result = "* 🥳 Just Applied to this job: " + str(offerPage)
         print("Adding to applied list")
-        self.already_applied.add(jobId)
+        self.already_applied.add(str(jobId))
 
         return result
 
@@ -346,8 +365,21 @@ class Linkedin:
     def element_exists(self, parent, by, selector):
         return len(parent.find_elements(by, selector)) > 0
 
+    def save_applied_jobs(self):
+        """Save the set of applied jobs to a JSON file"""
+        if not os.path.exists('data'):
+            os.makedirs('data')
+        with open(self.applied_jobs_file, 'w') as f:
+            json.dump(list(self.already_applied), f)
+        utils.prGreen(f"Saved {len(self.already_applied)} applied jobs to {self.applied_jobs_file}")
 
-start = time.time()
-Linkedin().linkJobApply()
-end = time.time()
-utils.prYellow("---Took: " + str(round((time.time() - start) / 60)) + " minute(s).")
+
+if __name__ == "__main__":
+    start = time.time()
+    bot = Linkedin()
+    try:
+        bot.linkJobApply()
+    finally:
+        bot.save_applied_jobs()
+        end = time.time()
+        utils.prYellow("---Took: " + str(round((time.time() - start) / 60)) + " minute(s).")
