@@ -22,6 +22,8 @@ class Linkedin:
 
         # Load previously applied jobs
         self.applied_jobs_file = "data/applied_jobs.json"
+        self.cant_apply  = set()
+        self.cant_apply_jobs_file = "data/cant_apply.json"
         try:
             with open(self.applied_jobs_file, 'r') as f:
                 self.already_applied = set(json.load(f))
@@ -30,6 +32,21 @@ class Linkedin:
             self.already_applied = set()
             utils.prYellow("No previous applications found, starting fresh")
 
+        self.get_driver()
+
+
+
+
+        # Test Additional questions
+
+        # start application
+
+        self.linkJobApply()
+
+    def getHash(self, string):
+        return hashlib.md5(string.encode('utf-8')).hexdigest()
+
+    def get_driver(self):
         self.driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()),
                                        options=utils.chromeBrowserOptions())
         # self.cookies_path = f"{os.path.join(os.getcwd(),'cookies')}/{self.getHash(config.email)}.pkl"
@@ -55,16 +72,7 @@ class Linkedin:
                 utils.prRed(
                     "❌ Couldn't log in Linkedin by using Chrome. Please check your Linkedin credentials on config files line 7 and 8.")
 
-            # self.saveCookies()
-
-        # Test Additional questions
-
-        # start application
-
-        self.linkJobApply()
-
-    def getHash(self, string):
-        return hashlib.md5(string.encode('utf-8')).hexdigest()
+        # self.saveCookies()
 
     def load_yaml_answers(self, file_path):
         with open(file_path, 'r') as file:
@@ -147,7 +155,11 @@ class Linkedin:
 
             # todo: change the flow - next, nect, review, submit, if it needs additional questions check, do not rely on exceptions for core logic
             print(url)
-            self.driver.get(url)
+            try:
+                self.driver.get(url)
+            except Exception as e:
+                self.get_driver()
+                self.driver.get(url)
             time.sleep(random.uniform(1, constants.botSpeed))
 
             totalJobs = self.driver.find_element(By.XPATH, '//small').text
@@ -184,9 +196,6 @@ class Linkedin:
                     try:
                         self.driver.get(offerPage)
                         time.sleep(random.uniform(1, constants.botSpeed))
-
-                        countJobs += 1
-
                         jobProperties = self.getJobProperties(countJobs)
                         if ("blacklisted" in jobProperties) or (jobID in self.already_applied):
                             lineToWrite = jobProperties + " | " + "* 🤬 Blacklisted Job, skipped!: " + str(offerPage)
@@ -237,7 +246,9 @@ class Linkedin:
                                                                  f"button[aria-label={'Submit application'}]").click()
                                         lineToWrite = jobProperties + " | " + "* 🥵 Cannot apply to this Job! " + str(
                                             offerPage)
+                                        self.cant_apply.add(str(offerPage))
                                         self.displayWriteResults(lineToWrite)
+
                             else:
                                 lineToWrite = jobProperties + " | " + "* 🥳 Already applied! Job: " + str(offerPage)
                                 self.already_applied.add(str(jobID))
@@ -245,6 +256,7 @@ class Linkedin:
                     except Exception as e:
                         lineToWrite = "* 🥵 Cannot apply to this Job! Major Error " + str(
                             offerPage)
+                        self.cant_apply.add(str(offerPage))
                         self.save_applied_jobs()
                         self.displayWriteResults(lineToWrite)
 
@@ -333,12 +345,11 @@ class Linkedin:
             self.fill_out_additional_questions()
 
             self.chooseResume()
-            time.sleep(random.uniform(1, constants.botSpeed))
-            # add resume bit here
+            time.sleep(random.uniform(4, constants.botSpeed))
             self.driver.find_element(By.CSS_SELECTOR, "button[aria-label='Continue to next step']").click()
 
         self.driver.find_element(By.CSS_SELECTOR, "button[aria-label='Review your application']").click()
-        time.sleep(random.uniform(5, constants.botSpeed))
+        time.sleep(random.uniform(2, constants.botSpeed))
 
         if config.followCompanies is False:
             try:
@@ -372,6 +383,10 @@ class Linkedin:
         with open(self.applied_jobs_file, 'w') as f:
             json.dump(list(self.already_applied), f)
         utils.prGreen(f"Saved {len(self.already_applied)} applied jobs to {self.applied_jobs_file}")
+
+        with open(self.cant_apply_jobs_file, 'w') as f:
+            json.dump(list(self.cant_apply), f)
+        utils.prGreen(f"Saved {len(self.cant_apply)} applied jobs to {self.cant_apply_jobs_file}")
 
 
 if __name__ == "__main__":
